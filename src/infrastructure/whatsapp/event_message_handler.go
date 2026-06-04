@@ -26,6 +26,13 @@ func handleMessage(ctx context.Context, evt *events.Message, _ domainChatStorage
 		evt.Message,
 	)
 
+	// Materialize SecretEncryptedMessage{MESSAGE_EDIT} envelope (sent by recent
+	// LID-migrated WhatsApp clients) into the legacy ProtocolMessage{MESSAGE_EDIT}
+	// form, so chat storage, webhook, and auto-reply all use the existing
+	// edit-handling paths unchanged. No-op when the envelope is absent or when
+	// decryption fails.
+	evt = materializeSecretEditMessage(ctx, evt, client)
+
 	// Handle stateless ID Checker commands (/get_chat_id or !get_chat_id)
 	if !evt.Info.IsFromMe {
 		msgText := strings.TrimSpace(strings.ToLower(utils.ExtractMessageTextFromProto(evt.Message)))
@@ -115,6 +122,38 @@ func handleAutoMarkRead(ctx context.Context, evt *events.Message, client *whatsm
 	} else {
 		log.Debugf("Marked message %s as read", evt.Info.ID)
 	}
+}
+
+// materializeSecretEditMessage decrypts a SecretEncryptedMessage{MESSAGE_EDIT}
+// envelope into its inner ProtocolMessage{MESSAGE_EDIT} form so downstream
+// consumers (chat storage, webhook payload builder, auto-reply) can rely on
+// the legacy edit-handling code paths unchanged. Returns the original event
+// when no envelope is present, when the client is nil, or when decryption
+// fails — preserving existing behavior in every other case.
+func materializeSecretEditMessage(ctx context.Context, evt *events.Message, client *whatsmeow.Client) *events.Message {
+	if evt == nil || evt.Message == nil || client == nil {
+		return evt
+	}
+	msg := utils.UnwrapMessage(evt.Message)
+	sem := msg.GetSecretEncryptedMessage()
+	if sem == nil || sem.GetSecretEncType() != waE2E.SecretEncryptedMessage_MESSAGE_EDIT {
+		return evt
+	}
+	decrypted, err := client.DecryptSecretEncryptedMessage(ctx, evt)
+	if err != nil {
+		targetID := ""
+		if k := sem.GetTargetMessageKey(); k != nil {
+			targetID = k.GetID()
+		}
+		log.Warnf("Failed to decrypt SecretEncryptedMessage(MESSAGE_EDIT) for %s (target=%s): %v", evt.Info.ID, targetID, err)
+		return evt
+	}
+	if decrypted == nil {
+		return evt
+	}
+	cloned := *evt
+	cloned.Message = decrypted
+	return &cloned
 }
 
 func handleWebhookForward(_ context.Context, evt *events.Message, client *whatsmeow.Client) {
