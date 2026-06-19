@@ -7,13 +7,8 @@ import (
 )
 
 var (
-<<<<<<< HEAD
 	AppVersion             = "v8.6.0"
 	AppPort                = "4040"
-=======
-	AppVersion             = "v8.8.0"
-	AppPort                = "3000"
->>>>>>> upstream/main
 	AppHost                = "0.0.0.0"
 	AppDebug               = false
 	AppOs                  = "IWANA"

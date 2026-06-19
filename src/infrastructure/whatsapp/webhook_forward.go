@@ -450,11 +450,7 @@ func isEventWhitelistedForChatwoot(eventName string) bool {
 	return false
 }
 
-<<<<<<< HEAD
 func buildReactionChatwootContent(data map[string]any, _ bool, fromName string) string {
-=======
-func buildReactionChatwootContent(data map[string]any, fromName string) string {
->>>>>>> upstream/main
 	reaction, _ := data["reaction"].(string)
 	reactedMessageID, _ := data["reacted_message_id"].(string)
 
@@ -933,7 +929,7 @@ func syncPayloadToChatwoot(ctx context.Context, payload map[string]any, eventNam
 	)
 	switch eventName {
 	case "message.reaction":
-		content = buildReactionChatwootContent(data, info.FromName)
+		content = buildReactionChatwootContent(data, info.IsGroup, info.FromName)
 		if rid, _ := data["reacted_message_id"].(string); rid != "" {
 			msgOpts.ContentAttributes = map[string]any{"in_reply_to_external_id": "WAID:" + rid}
 		}

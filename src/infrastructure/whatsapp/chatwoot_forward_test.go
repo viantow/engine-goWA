@@ -408,7 +408,7 @@ func TestBuildReactionChatwootContent(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := buildReactionChatwootContent(tc.payload, tc.fromName); got != tc.expected {
+			if got := buildReactionChatwootContent(tc.payload, false, tc.fromName); got != tc.expected {
 				t.Fatalf("expected %q, got %q", tc.expected, got)
 			}
 		})
