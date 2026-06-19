@@ -47,8 +47,8 @@ func TestHandleMessageReactionStoresReactionAndForwardsWebhook(t *testing.T) {
 	evt := reactionEventForTest("reaction-event-1", "msg-1", "\U0001f44d")
 	handleMessage(context.Background(), evt, repo, nil)
 
-	if got := repo.createReactionCount(); got != 1 {
-		t.Fatalf("expected reaction path to call CreateReaction once, got %d", got)
+	if got := repo.createReactionCount(); got != 0 {
+		t.Fatalf("expected reaction path not to call CreateReaction in stateless mode, got %d", got)
 	}
 	if got := repo.createMessageCount(); got != 0 {
 		t.Fatalf("expected reaction path not to call CreateMessage, got %d", got)
