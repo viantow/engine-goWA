@@ -35,6 +35,7 @@ var (
 	WhatsappWebhookSecret             = "secret"
 	WhatsappWebhookInsecureSkipVerify = false          // Skip TLS certificate verification for webhooks (insecure)
 	WhatsappWebhookEvents             []string         // Whitelist of events to forward to webhook (empty = all events)
+	WhatsappWebhookIgnoreJids         []string         // JIDs (or "@g.us"/"@s.whatsapp.net"/"@lid" wildcards) to skip when forwarding to webhooks
 	WhatsappAutoRejectCall                     = false // Auto-reject incoming calls
 	WhatsappLogLevel                           = "ERROR"
 	WhatsappSettingMaxImageSize       int64    = 20000000  // 20MB
@@ -44,15 +45,25 @@ var (
 	WhatsappTypeUser                           = "@s.whatsapp.net"
 	WhatsappTypeGroup                          = "@g.us"
 	WhatsappTypeLid                            = "@lid"
+	WhatsappTypeNewsletter                     = "@newsletter"
 	WhatsappAccountValidation                  = true
 	WhatsappPresenceOnConnect                  = "unavailable" // Presence to send on connect: "available", "unavailable", or "none"
 	WhatsappPresencePulseEnabled               = true          // Periodically pulse presence available, then unavailable
 	WhatsappPresencePulseInterval              = 24 * time.Hour
 	WhatsappPresencePulseDuration              = 5 * time.Minute
 
+	// WhatsappProxy is forwarded to whatsmeow's *Client.SetProxyAddress before
+	// Connect. Accepts SOCKS5/HTTP/HTTPS schemes, e.g.
+	// "socks5://user:pass@host:1080" or "http://host:8080". Empty = direct
+	// (no proxy). Useful for self-hosted deployments behind DPI / network
+	// egress restrictions where standard HTTP_PROXY env vars do not apply
+	// to the WhatsApp WebSocket dialer.
+	WhatsappProxy = ""
+
 	ChatStorageURI               = "file:storages/chatstorage.db"
 	ChatStorageEnableForeignKeys = true
 	ChatStorageEnableWAL         = true
+	ChatStorageMaxOpenConns      = 5 // Max concurrent SQLite connections for chat storage (WAL allows concurrent readers + 1 writer)
 
 	ChatwootEnabled   = false
 	ChatwootURL       = ""

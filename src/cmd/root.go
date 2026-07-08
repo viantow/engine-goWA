@@ -13,6 +13,7 @@ import (
 
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/config"
 	domainApp "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/app"
+	domainCall "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/call"
 	domainChat "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chat"
 	domainChatStorage "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/chatstorage"
 	domainDevice "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/device"
@@ -46,6 +47,7 @@ var (
 
 	// Usecase
 	appUsecase        domainApp.IAppUsecase
+	callUsecase       domainCall.ICallUsecase
 	chatUsecase       domainChat.IChatUsecase
 	sendUsecase       domainSend.ISendUsecase
 	userUsecase       domainUser.IUserUsecase
@@ -112,6 +114,11 @@ func initEnvConfig() {
 	if envDBKEYSURI := viper.GetString("db_keys_uri"); envDBKEYSURI != "" {
 		config.DBKeysURI = envDBKEYSURI
 	}
+	if viper.IsSet("chat_storage_max_open_conns") {
+		if n := viper.GetInt("chat_storage_max_open_conns"); n > 0 {
+			config.ChatStorageMaxOpenConns = n
+		}
+	}
 
 	// WhatsApp settings
 	if envAutoReply := viper.GetString("whatsapp_auto_reply"); envAutoReply != "" {
@@ -137,6 +144,16 @@ func initEnvConfig() {
 		events := strings.Split(envWebhookEvents, ",")
 		config.WhatsappWebhookEvents = events
 	}
+	if envWebhookIgnoreJids := viper.GetString("whatsapp_webhook_ignore_jids"); envWebhookIgnoreJids != "" {
+		parts := strings.Split(envWebhookIgnoreJids, ",")
+		jids := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if trimmed := strings.TrimSpace(p); trimmed != "" {
+				jids = append(jids, trimmed)
+			}
+		}
+		config.WhatsappWebhookIgnoreJids = jids
+	}
 	if viper.IsSet("whatsapp_account_validation") {
 		config.WhatsappAccountValidation = viper.GetBool("whatsapp_account_validation")
 	}
@@ -145,6 +162,12 @@ func initEnvConfig() {
 	}
 	if envPresenceOnConnect := viper.GetString("whatsapp_presence_on_connect"); envPresenceOnConnect != "" {
 		config.WhatsappPresenceOnConnect = envPresenceOnConnect
+	}
+	// Outbound proxy for whatsmeow WebSocket. Standard HTTP_PROXY env does not
+	// apply to the underlying ws dialer; this binding plumbs the address into
+	// (*whatsmeow.Client).SetProxyAddress before Connect. See issue #581.
+	if envProxy := viper.GetString("whatsapp_proxy"); envProxy != "" {
+		config.WhatsappProxy = envProxy
 	}
 	if viper.IsSet("whatsapp_presence_pulse_enabled") {
 		config.WhatsappPresencePulseEnabled = viper.GetBool("whatsapp_presence_pulse_enabled")
@@ -351,6 +374,12 @@ func initFlags() {
 		config.WhatsappWebhookEvents,
 		`whitelist of events to forward to webhook (empty = all events) --webhook-events <string> | example: --webhook-events="message,message.ack,group.participants"`,
 	)
+	rootCmd.PersistentFlags().StringSliceVarP(
+		&config.WhatsappWebhookIgnoreJids,
+		"webhook-ignore-jids", "",
+		config.WhatsappWebhookIgnoreJids,
+		`comma-separated WhatsApp JIDs (or "@g.us"/"@s.whatsapp.net"/"@lid" wildcards) to skip when forwarding to webhooks --webhook-ignore-jids <list> | example: --webhook-ignore-jids="@g.us,628123456789@s.whatsapp.net"`,
+	)
 	rootCmd.PersistentFlags().BoolVarP(
 		&config.WhatsappAccountValidation,
 		"account-validation", "",
@@ -368,6 +397,12 @@ func initFlags() {
 		"presence-on-connect", "",
 		config.WhatsappPresenceOnConnect,
 		`presence to send on connect: "available", "unavailable", or "none" --presence-on-connect <string> | example: --presence-on-connect="unavailable"`,
+	)
+	rootCmd.PersistentFlags().StringVarP(
+		&config.WhatsappProxy,
+		"whatsapp-proxy", "",
+		config.WhatsappProxy,
+		`outbound proxy for the WhatsApp WebSocket dialer --whatsapp-proxy <string> | example: --whatsapp-proxy="socks5://user:pass@host:1080"`,
 	)
 	rootCmd.PersistentFlags().BoolVarP(
 		&config.WhatsappPresencePulseEnabled,
@@ -520,8 +555,12 @@ func initChatStorage() (*sql.DB, error) {
 	}
 
 	// Configure connection pool
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	maxConns := config.ChatStorageMaxOpenConns
+	if maxConns < 1 {
+		maxConns = 1
+	}
+	db.SetMaxOpenConns(maxConns)
+	db.SetMaxIdleConns(maxConns)
 
 	// Test connection
 	if err := db.Ping(); err != nil {
@@ -571,13 +610,14 @@ func initApp() {
 
 	// Usecase
 	appUsecase = usecase.NewAppService(chatStorageRepo, dm)
+	callUsecase = usecase.NewCallService()
 	chatUsecase = usecase.NewChatService(chatStorageRepo)
 	sendUsecase = usecase.NewSendService(appUsecase, chatStorageRepo)
 	userUsecase = usecase.NewUserService(chatStorageRepo)
 	messageUsecase = usecase.NewMessageService(chatStorageRepo)
 	groupUsecase = usecase.NewGroupService()
 	newsletterUsecase = usecase.NewNewsletterService()
-	deviceUsecase = usecase.NewDeviceService(dm)
+	deviceUsecase = usecase.NewDeviceService(dm, appUsecase)
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
