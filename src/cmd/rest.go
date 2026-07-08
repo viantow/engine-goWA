@@ -62,14 +62,21 @@ func restServer(_ *cobra.Command, _ []string) {
 	app := fiber.New(fiberConfig)
 
 	app.Static(config.AppBasePath+"/statics", "./statics")
+	pathPrefixComponents := "components"
+	pathPrefixAssets := "assets"
+	if _, err := EmbedViews.Open("views/components"); err == nil {
+		pathPrefixComponents = "views/components"
+		pathPrefixAssets = "views/assets"
+	}
+
 	app.Use(config.AppBasePath+"/components", filesystem.New(filesystem.Config{
 		Root:       http.FS(EmbedViews),
-		PathPrefix: "components",
+		PathPrefix: pathPrefixComponents,
 		Browse:     true,
 	}))
 	app.Use(config.AppBasePath+"/assets", filesystem.New(filesystem.Config{
 		Root:       http.FS(EmbedViews),
-		PathPrefix: "assets",
+		PathPrefix: pathPrefixAssets,
 		Browse:     true,
 	}))
 
