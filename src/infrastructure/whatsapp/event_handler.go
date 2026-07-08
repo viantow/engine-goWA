@@ -46,7 +46,7 @@ func handler(ctx context.Context, instance *DeviceInstance, rawEvt any) {
 	case *events.PairPasskeyError:
 		handlePairPasskeyError(instance, evt)
 	case *events.LoggedOut:
-		handleLoggedOut(instance)
+		handleLoggedOut(ctx, instance, chatStorageRepo)
 	case *events.Connected, *events.PushNameSetting:
 		handleConnectionEvents(ctx, client, instance)
 	case *events.StreamReplaced:
@@ -156,6 +156,32 @@ func handlePairSuccess(ctx context.Context, evt *events.PairSuccess) {
 	}
 	primaryDB, secondaryDB := getStoreContainers()
 	syncKeysDevice(ctx, primaryDB, secondaryDB, evt.ID)
+}
+
+func handlePairPasskeyRequest(instance *DeviceInstance, evt *events.PairPasskeyRequest) {
+	instance.SetPasskeyChallenge(evt.PublicKey)
+	websocket.Broadcast <- websocket.BroadcastMessage{
+		Code:    "PASSKEY_REQUEST",
+		Message: "Passkey pairing request received",
+		Result:  evt.PublicKey,
+	}
+}
+
+func handlePairPasskeyConfirmation(instance *DeviceInstance, evt *events.PairPasskeyConfirmation) {
+	instance.SetPasskeyConfirmation(evt.Code, evt.SkipHandoffUX)
+	websocket.Broadcast <- websocket.BroadcastMessage{
+		Code:    "PASSKEY_CONFIRMATION",
+		Message: "Passkey confirmation code received",
+		Result:  map[string]any{"code": evt.Code, "skip_handoff_ux": evt.SkipHandoffUX},
+	}
+}
+
+func handlePairPasskeyError(instance *DeviceInstance, evt *events.PairPasskeyError) {
+	instance.ClearPasskeyState()
+	websocket.Broadcast <- websocket.BroadcastMessage{
+		Code:    "PASSKEY_ERROR",
+		Message: evt.Error.Error(),
+	}
 }
 
 func handleLoggedOut(_ context.Context, instance *DeviceInstance, chatStorageRepo domainChatStorage.IChatStorageRepository) {
